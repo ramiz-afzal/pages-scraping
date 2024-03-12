@@ -1,0 +1,127 @@
+import cloudscraper
+from bs4 import BeautifulSoup as soup
+import os
+import time
+import csv
+
+def get_url_data(url: str = None):
+    # sanity check
+    if not url:
+        return False
+
+    # make HTTP request
+    scraper = cloudscraper.create_scraper()
+    website = scraper.get(url)
+
+    if website.status_code != 200:
+        print(f"Invalid status code: {website.status_code}\n")
+        return False
+    
+    # initialize BeautifulSoup
+    web_soup = soup(website.text, 'html5lib')
+
+    # Check if body has "page" class so we can confirm we are on a page
+    body = web_soup.find('body')
+    if not body:
+        return False
+
+    body_css_classes = body.get('class', [])
+    if 'page' not in body_css_classes:
+        return False
+
+    # Get page text content
+    body_content = web_soup.find('div', attrs={"class": "entry-content"})
+    if not body_content:
+        return False
+
+    # Remove unnecessary elements from the data
+    dateModified = body_content.find('meta', attrs={"itemprop": "dateModified"})
+    if dateModified:
+        dateModified.decompose()
+
+    mainEntityOfPage = body_content.find('meta', attrs={"itemprop": "mainEntityOfPage"})
+    if mainEntityOfPage:
+        mainEntityOfPage.decompose()
+
+    gform = body_content.find('div', attrs={"class": "gform_wrapper"})
+    if gform:
+        gform.decompose()
+
+    iframes = body_content.find_all('iframe')
+    if iframes:
+        for iframe in iframes:
+            iframe.decompose()
+
+    scripts = body_content.find_all('script')
+    if scripts:
+        for script in scripts:
+            script.decompose()
+
+    swp = body_content.find('div', attrs={"class": "swp-hidden-panel-wrap"})
+    if swp:
+        swp.decompose()
+
+    publisher = body_content.find('div', attrs={"itemprop": "publisher"})
+    if publisher:
+        publisher.decompose()
+
+    # create a safe page_name
+    page_name = "".join([c for c in web_soup.title.string if c.isalpha() or c.isdigit() or c == ' ']).rstrip()
+
+    # create data object
+    url_data = {}
+    url_data.update({'name': page_name})
+    url_data.update({'url': url})
+    url_data.update({'content': body_content.prettify()})
+
+    return url_data
+
+
+# main function that loops overs pages urls in pages.xml
+def scrap_data():
+    source_file = "./pages.xml"
+    if not os.path.isfile(source_file):
+        print('Source file "pages.xml" does not exists')
+        return
+    
+    file_data = None
+    with open(source_file, 'r') as file:
+        file_data = file.read()
+
+    if not file_data:
+        print('Sources file returned empty data')
+        return
+    
+    web_soup = soup(file_data, features='lxml')
+    link_elements = web_soup.find_all('loc', limit=10)
+    if not link_elements or len(link_elements) == 0:
+        print('No url elements available in source file')
+        return
+    
+    scrapped_data = []
+    for link in link_elements:
+        url = link.text
+        if not url:
+            continue
+
+        url_data = get_url_data(url)
+        if not url_data:
+            continue
+
+        scrapped_data.append(url_data)
+
+    if len(scrapped_data) == 0:
+        print('None of the provided URLs returned proper data')
+        return
+
+    output_file_name = f"./results/{time.time()}-pages-data.csv"
+    with open(output_file_name, 'w', newline='', encoding='utf-8') as output_file:
+        dict_writer = csv.DictWriter(output_file, ['name','url', 'content'])
+        dict_writer.writeheader()
+        dict_writer.writerows(scrapped_data)
+    
+    print('Data scrapped successfully')
+    return
+
+# run program
+scrap_data()
