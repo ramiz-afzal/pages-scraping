@@ -68,11 +68,14 @@ def get_url_data(url: str = None):
     # create a safe page_name
     page_name = "".join([c for c in web_soup.title.string if c.isalpha() or c.isdigit() or c == ' ']).rstrip()
 
+    # page content
+    content = "".join([x.prettify(formatter='html') for x in body_content.find_all(recursive=False)])
+
     # create data object
     url_data = {}
     url_data.update({'name': page_name})
     url_data.update({'url': url})
-    url_data.update({'content': body_content.prettify()})
+    url_data.update({'content': content})
 
     return url_data
 
@@ -93,7 +96,7 @@ def scrap_data():
         return
     
     web_soup = soup(file_data, features='lxml')
-    link_elements = web_soup.find_all('loc', limit=10)
+    link_elements = web_soup.find_all('loc')
     if not link_elements or len(link_elements) == 0:
         print('No url elements available in source file')
         return
