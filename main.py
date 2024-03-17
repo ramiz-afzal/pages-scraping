@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup as soup
 import os
 import time
 import csv
+import urllib.parse
 
 def get_url_data(url: str = None):
     # sanity check
@@ -33,6 +34,20 @@ def get_url_data(url: str = None):
     body_content = web_soup.find('div', attrs={"class": "entry-content"})
     if not body_content:
         return False
+    
+    # SEO Description
+    seo_description = ''
+    meta_description = web_soup.find('meta', attrs={"name": "description"})
+    if meta_description:
+        seo_description = meta_description['content']
+    
+    # page slug
+    slug = ''
+    parsed_URL = urllib.parse.urlparse(url)
+    if "/" in parsed_URL.path:
+        slug = parsed_URL.path.split('/')[-1]
+    else:
+        slug = parsed_URL.path
 
     # Remove unnecessary elements from the data
     dateModified = body_content.find('meta', attrs={"itemprop": "dateModified"})
@@ -76,12 +91,15 @@ def get_url_data(url: str = None):
     url_data.update({'name': page_name})
     url_data.update({'url': url})
     url_data.update({'content': content})
+    url_data.update({'slug': slug})
+    url_data.update({'description': seo_description})
 
     return url_data
 
 
 # main function that loops overs pages urls in pages.xml
 def scrap_data():
+    print('Data scrapping started...')
     source_file = "./pages.xml"
     if not os.path.isfile(source_file):
         print('Source file "pages.xml" does not exists')
@@ -119,7 +137,7 @@ def scrap_data():
 
     output_file_name = f"./results/{time.time()}-pages-data.csv"
     with open(output_file_name, 'w', newline='', encoding='utf-8') as output_file:
-        dict_writer = csv.DictWriter(output_file, ['name','url', 'content'])
+        dict_writer = csv.DictWriter(output_file, ['name','url', 'content', 'slug', 'description'])
         dict_writer.writeheader()
         dict_writer.writerows(scrapped_data)
     
